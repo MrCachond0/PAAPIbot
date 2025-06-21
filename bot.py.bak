@@ -1,0 +1,402 @@
+import os
+import json
+import time
+import random
+import requests
+import base64
+import hmac
+import hashlib
+import uuid
+import urllib.parse
+from datetime import datetime, timedelta
+from dotenv import load_dotenv
+
+# Cargar variables de entorno
+load_dotenv()
+
+AMAZON_ACCESS_KEY = os.getenv('AMAZON_ACCESS_KEY')
+AMAZON_SECRET_KEY = os.getenv('AMAZON_SECRET_KEY')
+AMAZON_ASSOCIATE_TAG = os.getenv('AMAZON_ASSOCIATE_TAG')
+
+# Credenciales para OAuth 1.0a (Twitter)
+TWITTER_API_KEY = os.getenv('TWITTER_API_KEY')
+TWITTER_API_SECRET = os.getenv('TWITTER_API_SECRET')
+TWITTER_ACCESS_TOKEN = os.getenv('TWITTER_ACCESS_TOKEN')
+TWITTER_ACCESS_TOKEN_SECRET = os.getenv('TWITTER_ACCESS_TOKEN_SECRET')
+
+CONFIG_FILE = 'config.json'
+POSTED_FILE = 'posted_products.json'
+POSTED_TWEETS_FILE = 'posted_tweets.json'
+CONTENIDO_VALIOSO_FILE = 'contenido_valioso.json'
+TWEET_STATS_FILE = 'tweet_stats.json'
+
+# Cargar nichos
+with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+    config = json.load(f)
+NICHES = config.get('niches', [])
+
+# Cargar productos ya publicados
+if os.path.exists(POSTED_FILE):
+    with open(POSTED_FILE, 'r', encoding='utf-8') as f:
+        posted_products = set(json.load(f))
+else:
+    posted_products = set()
+
+# Cargar tuits ya publicados
+if os.path.exists(POSTED_TWEETS_FILE):
+    with open(POSTED_TWEETS_FILE, 'r', encoding='utf-8') as f:
+        posted_tweets = json.load(f)
+else:
+    posted_tweets = {"promocionales": [], "valiosos": [], "retweets": []}
+
+# Cargar contenido valioso
+if os.path.exists(CONTENIDO_VALIOSO_FILE):
+    with open(CONTENIDO_VALIOSO_FILE, 'r', encoding='utf-8') as f:
+        contenido_valioso = json.load(f)
+else:
+    contenido_valioso = []
+
+def save_posted_products():
+    with open(POSTED_FILE, 'w', encoding='utf-8') as f:
+        json.dump(list(posted_products), f)
+
+def save_posted_tweets():
+    with open(POSTED_TWEETS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(posted_tweets, f)
+
+def save_tweet_stats(stats):
+    with open(TWEET_STATS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(stats, f)
+
+def verify_amazon_url(url):
+    """
+    Verifica si una URL de Amazon es válida (el producto existe)
+    Retorna True si es válida, False si no lo es
+    """
+    try:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        }
+        response = requests.get(url, headers=headers, timeout=5)
+        
+        # Si la respuesta es 200, el producto existe
+        if response.status_code == 200:
+            return True
+        # Si la respuesta es 404, el producto no existe
+        elif response.status_code == 404:
+            print(f"⚠️ URL inválida (404): {url}")
+            return False
+        # Para otros códigos, asumimos un error y continuamos
+        else:
+            print(f"⚠️ Código de estado desconocido para {url}: {response.status_code}")
+            return True  # Seguimos para no bloquear el bot
+    except Exception as e:
+        print(f"Error al verificar URL {url}: {e}")
+        return True  # Seguimos para no bloquear el bot
+
+def get_amazon_products(niche, max_results=10):
+    """
+    Genera productos de Amazon con URLs reales para cada nicho.
+    En la versión final esto debería usar la API de Amazon, pero por ahora usamos
+    URLs reales predefinidas.
+    """
+    # Catálogo de productos reales por nicho
+    catalogo = {
+        "fitness": [
+            {
+                'asin': 'B08LGWFLT1',
+                'title': 'Bandas Elásticas Fitness',
+                'url': f'https://www.amazon.com/dp/B08LGWFLT1/?tag={AMAZON_ASSOCIATE_TAG}',
+                'description': '¡Mejora tus ejercicios con estas bandas elásticas de resistencia! Perfectas para entrenamiento en casa 💪 #Fitness'
+            },
+            {
+                'asin': 'B07DWSPQQY',
+                'title': 'Smartwatch Deportivo',
+                'url': f'https://www.amazon.com/dp/B07DWSPQQY/?tag={AMAZON_ASSOCIATE_TAG}',
+                'description': 'Monitoriza tus entrenamientos con este smartwatch deportivo resistente al agua. Tu compañero ideal para fitness 🏃‍♂️ #Fitness'
+            }
+        ],
+        "cocina": [
+            {
+                'asin': 'B08H2HKLRR',
+                'title': 'Sartén Antiadherente',
+                'url': f'https://www.amazon.com/dp/B08H2HKLRR/?tag={AMAZON_ASSOCIATE_TAG}',
+                'description': 'Cocina saludable con esta sartén antiadherente de alta calidad. ¡Tus platos quedarán perfectos! 🍳 #Cocina'
+            },
+            {
+                'asin': 'B08FJ8YL58',
+                'title': 'Robot de Cocina Multifunción',
+                'url': f'https://www.amazon.com/dp/B08FJ8YL58/?tag={AMAZON_ASSOCIATE_TAG}',
+                'description': 'Este robot de cocina multifunción te ahorrará horas de trabajo. Prepara hasta 10 recetas diferentes 🍲 #Cocina'
+            }
+        ],
+        "gaming": [
+            {
+                'asin': 'B07ZGPWPKZ',
+                'title': 'Auriculares Gaming con Micrófono',
+                'url': f'https://www.amazon.com/dp/B07ZGPWPKZ/?tag={AMAZON_ASSOCIATE_TAG}',
+                'description': 'Auriculares gaming con sonido envolvente y micrófono HD. Siente cada detalle de tus juegos favoritos 🎮 #Gaming'
+            },
+            {
+                'asin': 'B07GBZ4Q68',
+                'title': 'Ratón Gaming Programable',
+                'url': f'https://www.amazon.com/dp/B07GBZ4Q68/?tag={AMAZON_ASSOCIATE_TAG}',
+                'description': 'Ratón gaming con 12 botones programables y RGB. Mejora tu precisión y velocidad en cada partida 🖱️ #Gaming'
+            }
+        ],
+        "mascotas": [
+            {
+                'asin': 'B07D1G3NWC',
+                'title': 'Cama Ortopédica para Perros',
+                'url': f'https://www.amazon.com/dp/B07D1G3NWC/?tag={AMAZON_ASSOCIATE_TAG}',
+                'description': 'Dale a tu perro el descanso que merece con esta cama ortopédica. Alivia dolores articulares en mascotas mayores 🐕 #Mascotas'
+            },
+            {
+                'asin': 'B07CMY5Y1P',
+                'title': 'Rascador para Gatos Multifunción',
+                'url': f'https://www.amazon.com/dp/B07CMY5Y1P/?tag={AMAZON_ASSOCIATE_TAG}',
+                'description': 'Rascador con múltiples niveles para que tu gato se ejercite y divierta. Incluye juguetes y escondites 🐱 #Mascotas'
+            }
+        ],
+        "tecnología": [
+            {
+                'asin': 'B07V4GCFP9',
+                'title': 'Audífonos Bluetooth Inalámbricos',
+                'url': f'https://www.amazon.com/dp/B07V4GCFP9/?tag={AMAZON_ASSOCIATE_TAG}',
+                'description': 'Audífonos con 30h de batería y cancelación de ruido. Sonido premium para tus canciones favoritas 🎧 #Tecnología'
+            },
+            {
+                'asin': 'B082XY23D5',
+                'title': 'Cargador Inalámbrico Rápido',
+                'url': f'https://www.amazon.com/dp/B082XY23D5/?tag={AMAZON_ASSOCIATE_TAG}',
+                'description': 'Carga tu smartphone 2x más rápido con este cargador inalámbrico compatible con todos los dispositivos modernos ⚡ #Tecnología'
+            }
+        ],
+        "salud": [
+            {
+                'asin': 'B07WNLRZ3H',
+                'title': 'Báscula Inteligente con Bluetooth',
+                'url': f'https://www.amazon.com/dp/B07WNLRZ3H/?tag={AMAZON_ASSOCIATE_TAG}',
+                'description': 'Monitoriza tu peso, masa muscular y otros 14 indicadores con esta báscula smart. Se sincroniza con tu smartphone 📱 #Salud'
+            },
+            {
+                'asin': 'B07Q5HPBSM',
+                'title': 'Masajeador de Cuello y Espalda',
+                'url': f'https://www.amazon.com/dp/B07Q5HPBSM/?tag={AMAZON_ASSOCIATE_TAG}',
+                'description': 'Alivia dolores cervicales y de espalda con este masajeador shiatsu con calor. Perfecto después de largas jornadas 💆‍♂️ #Salud'
+            }
+        ],
+        "viajes": [
+            {
+                'asin': 'B07RKZQ92D',
+                'title': 'Maleta de Cabina Ultraligera',
+                'url': f'https://www.amazon.com/dp/B07RKZQ92D/?tag={AMAZON_ASSOCIATE_TAG}',
+                'description': 'Maleta resistente y ultraligera que cumple con todas las aerolíneas. Perfecta para tus escapadas de fin de semana ✈️ #Viajes'
+            },
+            {
+                'asin': 'B07CZDXDG8',
+                'title': 'Organizador de Maleta y Ropa',
+                'url': f'https://www.amazon.com/dp/B07CZDXDG8/?tag={AMAZON_ASSOCIATE_TAG}',
+                'description': 'Set de 7 organizadores para maletas. Maximiza espacio y mantén tu ropa perfectamente ordenada en tus viajes 🧳 #Viajes'
+            }
+        ]
+    }
+    
+    # Si el nicho no existe en nuestro catálogo, usa uno aleatorio
+    if niche not in catalogo:
+        niche = random.choice(list(catalogo.keys()))
+        
+    # Devuelve el catálogo para ese nicho
+    productos = catalogo[niche]
+    
+    # Si no hay suficientes productos, duplica los existentes
+    while len(productos) < max_results:
+        productos = productos + productos
+        
+    # Limita al máximo solicitado
+    return productos[:max_results]
+
+def generate_tweet(product):
+    desc = product['description'][:180]
+    tweet = f"{desc} {product['url']}"
+    if len(tweet) > 270:  # Twitter permite hasta 280 caracteres
+        tweet = tweet[:267] + '...'
+    return tweet
+
+def generate_valioso_tweet():
+    # Selecciona un tip/valor no repetido
+    disponibles = [t for t in contenido_valioso if t not in posted_tweets['valiosos']]
+    if not disponibles:
+        posted_tweets['valiosos'] = []
+        disponibles = contenido_valioso[:]
+    tweet = random.choice(disponibles)
+    posted_tweets['valiosos'].append(tweet)
+    save_posted_tweets()
+    return tweet
+
+def post_tweet_v2_direct(text):
+    """Publica tweet directamente con la API v2 usando OAuth 1.0a."""
+    # Endpoint para publicar tweets (API v2)
+    endpoint = "https://api.twitter.com/2/tweets"
+    
+    # Parámetros para OAuth 1.0a
+    oauth_consumer_key = TWITTER_API_KEY
+    oauth_token = TWITTER_ACCESS_TOKEN
+    oauth_signature_method = "HMAC-SHA1"
+    oauth_timestamp = str(int(time.time()))
+    oauth_nonce = uuid.uuid4().hex
+    oauth_version = "1.0"
+    
+    # Preparar el cuerpo de la solicitud
+    request_body = json.dumps({"text": text})
+    
+    # Parámetros para la firma
+    parameter_string = "&".join([
+        f"oauth_consumer_key={oauth_consumer_key}",
+        f"oauth_nonce={oauth_nonce}",
+        f"oauth_signature_method={oauth_signature_method}",
+        f"oauth_timestamp={oauth_timestamp}",
+        f"oauth_token={oauth_token}",
+        f"oauth_version={oauth_version}"
+    ])
+    
+    # Base string para firmar
+    base_string = f"POST&{urllib.parse.quote(endpoint, safe='')}&{urllib.parse.quote(parameter_string, safe='')}"
+    
+    # Clave para firmar
+    signing_key = f"{urllib.parse.quote(TWITTER_API_SECRET, safe='')}&{urllib.parse.quote(TWITTER_ACCESS_TOKEN_SECRET, safe='')}"
+    
+    # Calcular firma
+    signature = base64.b64encode(
+        hmac.new(
+            signing_key.encode(),
+            base_string.encode(),
+            hashlib.sha1
+        ).digest()
+    ).decode()
+    
+    # Cabecera de autorización
+    auth_header = (
+        f'OAuth oauth_consumer_key="{oauth_consumer_key}", '
+        f'oauth_token="{oauth_token}", '
+        f'oauth_signature_method="{oauth_signature_method}", '
+        f'oauth_timestamp="{oauth_timestamp}", '
+        f'oauth_nonce="{oauth_nonce}", '
+        f'oauth_version="{oauth_version}", '
+        f'oauth_signature="{urllib.parse.quote(signature, safe="")}"'
+    )
+    
+    headers = {
+        "Authorization": auth_header,
+        "Content-Type": "application/json"
+    }
+    
+    # Enviar solicitud
+    response = requests.post(endpoint, headers=headers, data=request_body)
+    
+    # Analizar respuesta
+    if response.status_code == 201:
+        return response.json().get('data', {}).get('id'), None
+    else:
+        return None, f"{response.status_code} - {response.text}"
+
+def post_to_twitter(tweet, tipo="promocional"):
+    tweet_id, error = post_tweet_v2_direct(tweet)
+    
+    if tweet_id:
+        print(f"Tuit publicado: {tweet}")
+        print(f"URL: https://twitter.com/i/web/status/{tweet_id}")
+        
+        # Guardar ID para evitar repeticiones
+        if tipo == "promocional":
+            posted_tweets['promocionales'].append(tweet_id)
+        elif tipo == "valioso":
+            posted_tweets['valiosos'].append(tweet)
+        save_posted_tweets()
+        
+        # Registrar estadística básica
+        registrar_tweet_stat(tweet, tipo, tweet_id)
+        return tweet_id
+    else:
+        print(f"Error al publicar tuit: {error}")
+        return None
+
+def retweet_influencer(influencer_screen_name):
+    print(f"Función de retweet no implementada para {influencer_screen_name}")
+    print("Twitter API Free solo permite publicar tweets propios, no retweets")
+    return None
+
+def registrar_tweet_stat(texto, tipo, tweet_id):
+    # Guarda un registro simple de cada tuit publicado
+    if os.path.exists(TWEET_STATS_FILE):
+        with open(TWEET_STATS_FILE, 'r', encoding='utf-8') as f:
+            stats = json.load(f)
+    else:
+        stats = []
+    stats.append({
+        "fecha": datetime.now().isoformat(),
+        "tipo": tipo,
+        "tweet_id": tweet_id,
+        "texto": texto[:100]
+    })
+    save_tweet_stats(stats)
+
+def publicar_batch_diario():
+    # Determina cuántos tuits de cada tipo publicar
+    # En plan Free estamos limitados a 500 escritos por mes, así que vamos a ser conservadores
+    total = random.randint(10, 15)  # 10-15 tweets al día = 300-450 al mes (por debajo del límite de 500)
+    n_promos = int(total * random.uniform(0.5, 0.6))
+    n_valiosos = total - n_promos  # Eliminamos retweets ya que la API gratuita no los permite fácilmente
+    
+    print(f"Iniciando publicación diaria: {total} tuits ({n_promos} promocionales, {n_valiosos} valiosos)")
+    
+    # Publicar promocionales
+    for i in range(n_promos):
+        niche = random.choice(NICHES)
+        products = get_amazon_products(niche)
+        random.shuffle(products)
+        
+        # Buscar un producto válido que no se haya publicado aún
+        valid_product_found = False
+        for product in products:
+            if product['asin'] not in posted_products:
+                # Verificar que la URL de Amazon es válida
+                if verify_amazon_url(product['url']):
+                    tweet = generate_tweet(product)
+                    post_to_twitter(tweet, tipo="promocional")
+                    posted_products.add(product['asin'])
+                    save_posted_products()
+                    valid_product_found = True
+                    break
+                else:
+                    print(f"Producto con ASIN {product['asin']} descartado - URL inválida")
+        
+        if not valid_product_found:
+            print(f"No se encontró ningún producto válido para el nicho {niche}")
+        
+        if i < n_promos - 1:  # No esperar después del último
+            time.sleep(random.randint(300, 900))  # Espaciar 5-15 minutos entre tweets
+    
+    # Publicar valiosos
+    for i in range(n_valiosos):
+        tweet = generate_valioso_tweet()
+        post_to_twitter(tweet, tipo="valioso")
+        if i < n_valiosos - 1:  # No esperar después del último
+            time.sleep(random.randint(300, 900))  # Espaciar 5-15 minutos entre tweets
+    
+    print("Batch diario completado")
+
+def main():
+    publicar_batch_diario()
+
+def run_estrategia():
+    # Loop 24/7, ejecuta batch diario sin restricción de horario
+    while True:
+        main()
+        # Espera 24 horas antes de volver a publicar
+        print(f"Esperando 24 horas hasta el próximo batch... {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        time.sleep(24 * 60 * 60)
+
+if __name__ == "__main__":
+    print(f"Iniciando bot Amazon Afiliados + Twitter... {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    run_estrategia()
