@@ -68,6 +68,16 @@
      - Usa un servicio como https://uptimerobot.com/ para hacer ping cada 5 minutos a la URL web de tu Repl (agrega un archivo `main.py` con un pequeño servidor Flask si necesitas exponer un endpoint web).
      - Mientras el Repl reciba visitas, el bot seguirá corriendo.
    - Consulta la documentación oficial de Replit para detalles y límites del plan gratuito.
+   - **Variables de entorno en Replit:**
+     - Si subes el proyecto desde GitHub y tienes `.env` en `.gitignore`, deberás crear manualmente las variables de entorno en Replit.
+     - Ve al panel izquierdo (ícono de candado o "Secrets") y agrega cada clave y valor igual que en tu `.env` local.
+     - Ejemplo:
+       - `AMAZON_ACCESS_KEY=...`
+       - `AMAZON_SECRET_KEY=...`
+       - `AMAZON_ASSOCIATE_TAG=...`
+       - `TWITTER_API_KEY=...`
+       - etc.
+     - Así tus claves estarán seguras y el bot funcionará correctamente en la nube.
 
 ## Notas
 - El bot guarda los productos y tuits ya publicados en `posted_products.json` y `posted_tweets.json`.
