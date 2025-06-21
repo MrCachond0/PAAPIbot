@@ -171,24 +171,46 @@ def get_best_seller_from_amazon(keyword):
 
 def get_viral_product_for_niche(niche):
     """
-    Busca el producto más viral y vendible para un nicho, probando varias keywords virales.
+    Busca el producto más viral y vendible para un nicho, probando varias keywords virales y validando la URL.
     """
     keywords = get_trending_keywords(niche, top_n=3)
     for kw in keywords:
         product = get_best_seller_from_amazon(kw)
-        if product:
+        if product and is_valid_amazon_url(product['url']):
             return product
+        elif product:
+            print(f"[Descartado] Producto con ASIN {product['asin']} por URL inválida.")
     # Si no se encontró producto ideal, fallback a método original
     print("[Fallback] Usando método alternativo para encontrar producto...")
     for kw in keywords:
-        # Scraping Google y PAAPI ya están en get_best_seller_from_amazon
         product = get_best_seller_from_amazon(kw)
-        if product:
+        if product and is_valid_amazon_url(product['url']):
             return product
+        elif product:
+            print(f"[Descartado] Producto con ASIN {product['asin']} por URL inválida.")
     return None
+
+def is_valid_amazon_url(url):
+    """
+    Verifica si una URL de Amazon es válida (status 200 y contiene 'dp/ASIN').
+    """
+    try:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        }
+        resp = requests.get(url, headers=headers, timeout=8)
+        if resp.status_code == 200 and '/dp/' in resp.url:
+            return True
+        else:
+            print(f"[URL inválida] {url} (status: {resp.status_code})")
+            return False
+    except Exception as e:
+        print(f"[Error validando URL] {url}: {e}")
+        return False
 
 # Ejemplo de uso:
 if __name__ == "__main__":
     niche = "fitness"
     product = get_viral_product_for_niche(niche)
     print(product)
+
