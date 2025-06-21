@@ -41,10 +41,9 @@ def get_trending_keywords(niche, top_n=3):
     return keywords[:top_n]
 
 
-def get_best_seller_from_amazon(keyword):
+def get_best_seller_from_amazon(keyword, max_attempts=10):
     """
-    Mejorado: Devuelve el primer producto realmente disponible (no patrocinado, con título, imagen, url y sin mensajes de "no disponible").
-    Prioriza Best Seller/Amazon's Choice, pero solo si están disponibles.
+    Devuelve el primer producto realmente disponible y válido, intentando hasta max_attempts productos distintos.
     """
     print(f"[Scraping] Buscando producto viral en Amazon para '{keyword}'...")
     try:
@@ -68,8 +67,10 @@ def get_best_seller_from_amazon(keyword):
             # Buscar texto de no disponible en el resultado
             text = result.get_text(separator=' ').lower()
             return not any(signal in text for signal in unavailable_signals)
-        # Prioridad: Best Seller/Amazon's Choice y disponible
+        attempts = 0
         for result in results:
+            if attempts >= max_attempts:
+                break
             asin = result.get('data-asin')
             if not asin:
                 continue
@@ -83,10 +84,11 @@ def get_best_seller_from_amazon(keyword):
             product_url = f"https://www.amazon.com/dp/{asin}/?tag={AMAZON_ASSOCIATE_TAG}"
             img_elem = result.find('img', {'class': 's-image'})
             image = img_elem['src'] if img_elem else ''
-            if not (title and product_url and image):
+            if not (title and product_url and image and is_available(result)):
                 continue
-            if badge_text in ["Best Seller", "Amazon's Choice"] and is_available(result):
-                print(f"[Seleccionado] Producto destacado y disponible: {title} | Badge: {badge_text}")
+            # Validar url real
+            if is_valid_amazon_url(product_url):
+                print(f"[Seleccionado] Producto válido: {title}")
                 return {
                     'asin': asin,
                     'title': title,
@@ -95,29 +97,10 @@ def get_best_seller_from_amazon(keyword):
                     'image': image,
                     'badge': badge_text
                 }
-        # Si no hay destacados, buscar el primer producto genérico disponible
-        for result in results:
-            asin = result.get('data-asin')
-            if not asin:
-                continue
-            sponsored = result.find('span', string=lambda s: s and 'Sponsored' in s)
-            if sponsored:
-                continue
-            title_elem = result.find('span', {'class': 'a-size-medium'})
-            title = title_elem.text.strip() if title_elem else keyword
-            product_url = f"https://www.amazon.com/dp/{asin}/?tag={AMAZON_ASSOCIATE_TAG}"
-            img_elem = result.find('img', {'class': 's-image'})
-            image = img_elem['src'] if img_elem else ''
-            if title and product_url and image and is_available(result):
-                print(f"[Seleccionado] Producto genérico disponible: {title}")
-                return {
-                    'asin': asin,
-                    'title': title,
-                    'url': product_url,
-                    'description': title,
-                    'image': image
-                }
-        print("[Scraping] No se encontró producto disponible en el HTML de Amazon.")
+            else:
+                print(f"[Descartado] Producto con ASIN {asin} por URL inválida.")
+            attempts += 1
+        print("[Scraping] No se encontró producto disponible y válido en el HTML de Amazon.")
     except Exception as e:
         print(f"[Scraping] Error en scraping Amazon: {e}")
     # Scraping Google (site:amazon.com ...)
@@ -178,14 +161,14 @@ def get_best_seller_from_amazon(keyword):
                 print(f"[Descartado PAAPI] ASIN {asin} por URL inválida/no disponible.")
     return None
 
-def get_viral_product_for_niche(niche, fallback_niches=None):
+def get_viral_product_for_niche(niche, fallback_niches=None, max_attempts=10):
     """
     Busca el producto más viral y vendible para un nicho, probando varias keywords virales y validando la URL.
     Si no encuentra producto válido, prueba con otros nichos alternativos.
     """
     keywords = get_trending_keywords(niche, top_n=3)
     for kw in keywords:
-        product = get_best_seller_from_amazon(kw)
+        product = get_best_seller_from_amazon(kw, max_attempts=max_attempts)
         if product and is_valid_amazon_url(product['url']):
             return product
         elif product:
@@ -193,7 +176,7 @@ def get_viral_product_for_niche(niche, fallback_niches=None):
     # Si no se encontró producto ideal, fallback a método original
     print("[Fallback] Usando método alternativo para encontrar producto...")
     for kw in keywords:
-        product = get_best_seller_from_amazon(kw)
+        product = get_best_seller_from_amazon(kw, max_attempts=max_attempts)
         if product and is_valid_amazon_url(product['url']):
             return product
         elif product:
@@ -204,7 +187,7 @@ def get_viral_product_for_niche(niche, fallback_niches=None):
             if alt_niche == niche:
                 continue
             print(f"[Fallback] Probando nicho alternativo: {alt_niche}")
-            product = get_viral_product_for_niche(alt_niche)
+            product = get_viral_product_for_niche(alt_niche, max_attempts=max_attempts)
             if product:
                 return product
     return None
