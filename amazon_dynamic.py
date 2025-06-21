@@ -192,7 +192,7 @@ def get_viral_product_for_niche(niche):
 
 def is_valid_amazon_url(url):
     """
-    Verifica si una URL de Amazon es válida (status 200 y contiene 'dp/ASIN').
+    Verifica si una URL de Amazon es válida (status 200, contiene '/dp/' y no muestra página de error).
     """
     try:
         headers = {
@@ -200,6 +200,16 @@ def is_valid_amazon_url(url):
         }
         resp = requests.get(url, headers=headers, timeout=8)
         if resp.status_code == 200 and '/dp/' in resp.url:
+            html = resp.text.lower()
+            if (
+                "sorry, we couldn't find that page" in html or
+                "no longer available" in html or
+                "looking for something?" in html or
+                "page not found" in html or
+                "did not match any products" in html
+            ):
+                print(f"[URL inválida] Página de error detectada en {url}")
+                return False
             return True
         else:
             print(f"[URL inválida] {url} (status: {resp.status_code})")
