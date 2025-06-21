@@ -1,6 +1,7 @@
 from flask import Flask
 import threading
 import os
+from threading import Thread
 
 app = Flask(__name__)
 
@@ -21,4 +22,5 @@ if __name__ == "__main__":
     # O simplemente mantener el proceso vivo
     import time
     while True:
+
         time.sleep(60)

@@ -69,18 +69,42 @@ def save_tweet_stats(stats):
     with open(TWEET_STATS_FILE, 'w', encoding='utf-8') as f:
         json.dump(stats, f)
 
-def get_amazon_products(niche, max_results=10):
+def get_amazon_products(niche, max_results=10, fallback_niches=None):
     """
     Obtiene productos frescos y validados usando get_viral_product_for_niche.
-    Devuelve una lista con un solo producto válido (o vacía si no hay).
+    Si no hay producto válido en el nicho, prueba con nichos alternativos.
     """
-    product = get_viral_product_for_niche(niche)
+    product = get_viral_product_for_niche(niche, fallback_niches=fallback_niches)
     return [product] if product else []
 
 def generate_tweet(product):
-    desc = product['description'][:180]
-    tweet = f"{desc} {product['url']}"
-    if len(tweet) > 270:  # Twitter permite hasta 280 caracteres
+    # Plantillas atractivas para tuits
+    hooks = [
+        "¡Descubre este top ventas!",
+        "No te quedes sin el tuyo:",
+        "Oferta recomendada:",
+        "¡Ideal para tu día a día!",
+        "Lo más vendido en Amazon:",
+        "¿Buscas calidad? Mira esto:",
+        "Haz tu vida más fácil con esto:",
+        "¡Aprovecha antes de que se agote!",
+        "Perfecto para regalar:",
+        "Miles de personas ya lo usan:",
+    ]
+    desc = product.get('description') or product.get('title') or ''
+    hook = random.choice(hooks)
+    hashtags = ""
+    # Añadir hashtags según el nicho si existe
+    if 'fitness' in desc.lower():
+        hashtags = "#Fitness #Salud"
+    elif 'cocina' in desc.lower():
+        hashtags = "#Cocina #Hogar"
+    elif 'tecnolog' in desc.lower() or 'tech' in desc.lower():
+        hashtags = "#Tecnología #Gadgets"
+    elif 'mascota' in desc.lower():
+        hashtags = "#Mascotas #PetLovers"
+    tweet = f"{hook} {desc} {product['url']} {hashtags}".strip()
+    if len(tweet) > 270:
         tweet = tweet[:267] + '...'
     return tweet
 
@@ -214,7 +238,8 @@ def publicar_batch_diario():
     # Publicar promocionales
     for i in range(n_promos):
         niche = random.choice(NICHES)
-        products = get_amazon_products(niche)
+        fallback_niches = [n for n in NICHES if n != niche]
+        products = get_amazon_products(niche, fallback_niches=fallback_niches)
         random.shuffle(products)
         
         # Buscar un producto válido que no se haya publicado aún
