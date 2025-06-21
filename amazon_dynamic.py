@@ -178,10 +178,9 @@ def get_best_seller_from_amazon(keyword):
                 print(f"[Descartado PAAPI] ASIN {asin} por URL inválida/no disponible.")
     return None
 
-def get_viral_product_for_niche(niche, fallback_niches=None):
+def get_viral_product_for_niche(niche):
     """
     Busca el producto más viral y vendible para un nicho, probando varias keywords virales y validando la URL.
-    Si no encuentra producto válido, prueba con otros nichos alternativos.
     """
     keywords = get_trending_keywords(niche, top_n=3)
     for kw in keywords:
@@ -198,15 +197,6 @@ def get_viral_product_for_niche(niche, fallback_niches=None):
             return product
         elif product:
             print(f"[Descartado] Producto con ASIN {product['asin']} por URL inválida.")
-    # Si sigue sin encontrar, probar con otros nichos
-    if fallback_niches:
-        for alt_niche in fallback_niches:
-            if alt_niche == niche:
-                continue
-            print(f"[Fallback] Probando nicho alternativo: {alt_niche}")
-            product = get_viral_product_for_niche(alt_niche)
-            if product:
-                return product
     return None
 
 def is_valid_amazon_url(url):
