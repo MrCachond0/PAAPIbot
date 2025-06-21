@@ -1,6 +1,6 @@
 from flask import Flask
-from threading import Thread
 import os
+import threading
 from threading import Thread
 
 app = Flask(__name__)
@@ -16,7 +16,7 @@ def run_flask():
 if __name__ == "__main__":
 
     # Ejecuta Flask en un hilo para mantener el Repl activo
-    threading.Thread(target=run_flask).start()
+    Thread(target=run_flask).start()
     # Aquí puedes importar y lanzar tu bot si quieres que corra junto al servidor
     # from bot import run_estrategia
     # run_estrategia()
