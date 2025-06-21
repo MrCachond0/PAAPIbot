@@ -43,7 +43,8 @@ def get_trending_keywords(niche, top_n=3):
 
 def get_best_seller_from_amazon(keyword):
     """
-    Mejorado: Relaja los filtros. Devuelve el primer producto con título, imagen y url, priorizando Best Seller/Amazon's Choice, pero si no hay, acepta cualquier producto válido.
+    Mejorado: Devuelve el primer producto realmente disponible (no patrocinado, con título, imagen, url y sin mensajes de "no disponible").
+    Prioriza Best Seller/Amazon's Choice, pero solo si están disponibles.
     """
     print(f"[Scraping] Buscando producto viral en Amazon para '{keyword}'...")
     try:
@@ -56,50 +57,45 @@ def get_best_seller_from_amazon(keyword):
         resp = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(resp.text, 'html.parser')
         results = soup.find_all('div', {'data-component-type': 's-search-result'})
+        # Filtrar productos realmente disponibles
+        def is_available(result):
+            unavailable_signals = [
+                'currently unavailable', 'no disponible', 'momentáneamente no disponible',
+                'not available', 'unavailable', 'momentanemente no disponible',
+                'out of stock', 'agotado', 'sin stock',
+                'no longer available', 'ya no está disponible',
+            ]
+            # Buscar texto de no disponible en el resultado
+            text = result.get_text(separator=' ').lower()
+            return not any(signal in text for signal in unavailable_signals)
+        # Prioridad: Best Seller/Amazon's Choice y disponible
         for result in results:
             asin = result.get('data-asin')
             if not asin:
                 continue
-            # Filtrar patrocinados (opcional, pero menos estricto)
             sponsored = result.find('span', string=lambda s: s and 'Sponsored' in s)
             if sponsored:
                 continue
             badge = result.find('span', {'class': 'a-badge-text'})
             badge_text = badge.text.strip() if badge else ''
-            rating_elem = result.find('span', {'class': 'a-icon-alt'})
-            try:
-                rating = float(rating_elem.text.split()[0].replace(',', '.')) if rating_elem else 0
-            except Exception:
-                rating = 0
-            reviews_elem = result.find('span', {'class': 'a-size-base'})
-            try:
-                reviews = int(reviews_elem.text.replace(',', '')) if reviews_elem and reviews_elem.text.replace(',', '').isdigit() else 0
-            except Exception:
-                reviews = 0
             title_elem = result.find('span', {'class': 'a-size-medium'})
             title = title_elem.text.strip() if title_elem else keyword
             product_url = f"https://www.amazon.com/dp/{asin}/?tag={AMAZON_ASSOCIATE_TAG}"
-            desc = title
             img_elem = result.find('img', {'class': 's-image'})
             image = img_elem['src'] if img_elem else ''
-            # Log de descarte
             if not (title and product_url and image):
-                print(f"[Descartado] Faltan datos clave: title={bool(title)}, url={bool(product_url)}, image={bool(image)}")
                 continue
-            # Prioridad: Best Seller/Amazon's Choice
-            if badge_text in ["Best Seller", "Amazon's Choice"]:
-                print(f"[Seleccionado] Producto destacado: {title} | Badge: {badge_text}")
+            if badge_text in ["Best Seller", "Amazon's Choice"] and is_available(result):
+                print(f"[Seleccionado] Producto destacado y disponible: {title} | Badge: {badge_text}")
                 return {
                     'asin': asin,
                     'title': title,
                     'url': product_url,
-                    'description': desc,
+                    'description': title,
                     'image': image,
-                    'badge': badge_text,
-                    'rating': rating,
-                    'reviews': reviews
+                    'badge': badge_text
                 }
-        # Si no hay destacados, devolver el primer producto válido
+        # Si no hay destacados, buscar el primer producto genérico disponible
         for result in results:
             asin = result.get('data-asin')
             if not asin:
@@ -112,8 +108,8 @@ def get_best_seller_from_amazon(keyword):
             product_url = f"https://www.amazon.com/dp/{asin}/?tag={AMAZON_ASSOCIATE_TAG}"
             img_elem = result.find('img', {'class': 's-image'})
             image = img_elem['src'] if img_elem else ''
-            if title and product_url and image:
-                print(f"[Seleccionado] Producto genérico: {title}")
+            if title and product_url and image and is_available(result):
+                print(f"[Seleccionado] Producto genérico disponible: {title}")
                 return {
                     'asin': asin,
                     'title': title,
@@ -121,7 +117,7 @@ def get_best_seller_from_amazon(keyword):
                     'description': title,
                     'image': image
                 }
-        print("[Scraping] No se encontró producto válido en el HTML de Amazon.")
+        print("[Scraping] No se encontró producto disponible en el HTML de Amazon.")
     except Exception as e:
         print(f"[Scraping] Error en scraping Amazon: {e}")
     # Scraping Google (site:amazon.com ...)
@@ -145,28 +141,41 @@ def get_best_seller_from_amazon(keyword):
                     asin = m.group(1)
                     product_url = f"https://www.amazon.com/dp/{asin}/?tag={AMAZON_ASSOCIATE_TAG}"
                     title = link.text.strip() or keyword
-                    return {
-                        'asin': asin,
-                        'title': title,
-                        'url': product_url,
-                        'description': title,
-                        'image': ''
-                    }
+                    # Validar disponibilidad real
+                    if is_valid_amazon_url(product_url):
+                        return {
+                            'asin': asin,
+                            'title': title,
+                            'url': product_url,
+                            'description': title,
+                            'image': ''
+                        }
+                    else:
+                        print(f"[Descartado Google] ASIN {asin} por URL inválida/no disponible.")
         print("[Scraping] No se encontró producto válido en Google.")
     except Exception as e:
         print(f"[Scraping] Error en scraping Google: {e}")
-    # Si scraping falla, intenta PAAPI
+    # PAAPI
     print("[PAAPI] Intentando obtener producto con Product Advertising API...")
-    data = search_amazon_items(keyword, item_count=1)
-    if data and 'SearchResult' in data and 'Items' in data['SearchResult'] and len(data['SearchResult']['Items']) > 0:
-        item = data['SearchResult']['Items'][0]
-        return {
-            'asin': item['ASIN'],
-            'title': item['ItemInfo']['Title']['DisplayValue'],
-            'url': item['DetailPageURL'],
-            'description': item['ItemInfo']['Features']['DisplayValues'][0] if 'Features' in item['ItemInfo'] else '',
-            'image': item['Images']['Primary']['Large']['URL'] if 'Images' in item and 'Primary' in item['Images'] else ''
-        }
+    data = search_amazon_items(keyword, item_count=5)
+    if data and 'SearchResult' in data and 'Items' in data['SearchResult']:
+        for item in data['SearchResult']['Items']:
+            url = item['DetailPageURL']
+            title = item['ItemInfo']['Title']['DisplayValue']
+            image = item['Images']['Primary']['Large']['URL'] if 'Images' in item and 'Primary' in item['Images'] else ''
+            asin = item['ASIN']
+            desc = item['ItemInfo']['Features']['DisplayValues'][0] if 'Features' in item['ItemInfo'] else ''
+            # Validar disponibilidad real
+            if is_valid_amazon_url(url):
+                return {
+                    'asin': asin,
+                    'title': title,
+                    'url': url,
+                    'description': desc,
+                    'image': image
+                }
+            else:
+                print(f"[Descartado PAAPI] ASIN {asin} por URL inválida/no disponible.")
     return None
 
 def get_viral_product_for_niche(niche):
@@ -193,6 +202,7 @@ def get_viral_product_for_niche(niche):
 def is_valid_amazon_url(url):
     """
     Verifica si una URL de Amazon es válida (status 200, contiene '/dp/' y no muestra página de error).
+    Ahora detecta mensajes de error en varios idiomas y variantes comunes de Amazon.
     """
     try:
         headers = {
@@ -201,13 +211,28 @@ def is_valid_amazon_url(url):
         resp = requests.get(url, headers=headers, timeout=8)
         if resp.status_code == 200 and '/dp/' in resp.url:
             html = resp.text.lower()
-            if (
-                "sorry, we couldn't find that page" in html or
-                "no longer available" in html or
-                "looking for something?" in html or
-                "page not found" in html or
-                "did not match any products" in html
-            ):
+            error_signals = [
+                # Inglés
+                "sorry, we couldn't find that page",
+                "no longer available",
+                "looking for something?",
+                "page not found",
+                "did not match any products",
+                # Español
+                "lo sentimos, no pudimos encontrar",
+                "ya no está disponible",
+                "buscando algo?",
+                "página no encontrada",
+                "no coincide con ningún producto",
+                # Portugués
+                "desculpe, não foi possível encontrar essa página",
+                "não está mais disponível",
+                "procurando por algo?",
+                "página não encontrada",
+                # Genérico
+                "dogs of amazon"
+            ]
+            if any(signal in html for signal in error_signals):
                 print(f"[URL inválida] Página de error detectada en {url}")
                 return False
             return True

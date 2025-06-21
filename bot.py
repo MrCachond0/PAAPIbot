@@ -10,6 +10,7 @@ import uuid
 import urllib.parse
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
+from amazon_dynamic import is_valid_amazon_url, get_viral_product_for_niche
 
 # Cargar variables de entorno
 load_dotenv()
@@ -68,278 +69,13 @@ def save_tweet_stats(stats):
     with open(TWEET_STATS_FILE, 'w', encoding='utf-8') as f:
         json.dump(stats, f)
 
-def verify_amazon_url(url):
-    """
-    Verifica si una URL de Amazon es válida (el producto existe)
-    Retorna True si es válida, False si no lo es
-    """
-    try:
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-        }
-        response = requests.get(url, headers=headers, timeout=5)
-        
-        # Si la respuesta es 200, el producto existe
-        if response.status_code == 200:
-            return True
-        # Si la respuesta es 404, el producto no existe
-        elif response.status_code == 404:
-            print(f"⚠️ URL inválida (404): {url}")
-            return False
-        # Para otros códigos, asumimos un error y continuamos
-        else:
-            print(f"⚠️ Código de estado desconocido para {url}: {response.status_code}")
-            return True  # Seguimos para no bloquear el bot
-    except Exception as e:
-        print(f"Error al verificar URL {url}: {e}")
-        return True  # Seguimos para no bloquear el bot
-
 def get_amazon_products(niche, max_results=10):
     """
-    Genera productos de Amazon con URLs reales para cada nicho.
-    En la versión final esto debería usar la API de Amazon, pero por ahora usamos
-    URLs reales predefinidas.
+    Obtiene productos frescos y validados usando get_viral_product_for_niche.
+    Devuelve una lista con un solo producto válido (o vacía si no hay).
     """
-    # Catálogo de productos reales por nicho
-    catalogo = {
-        "fitness": [
-            {
-                'asin': 'B084P72GYX',
-                'title': 'Bandas Elásticas de Resistencia',
-                'url': f'https://www.amazon.com/dp/B084P72GYX/?tag={AMAZON_ASSOCIATE_TAG}',
-                'description': '¡Mejora tu entrenamiento en casa con estas bandas de resistencia de alta calidad! Ideales para todo tipo de ejercicios 💪 #Fitness'
-            },
-            {
-                'asin': 'B07G8TTRDZ',
-                'title': 'Pulsera de Actividad Inteligente',
-                'url': f'https://www.amazon.com/dp/B07G8TTRDZ/?tag={AMAZON_ASSOCIATE_TAG}',
-                'description': 'Monitoriza tu actividad diaria, ritmo cardíaco y sueño con esta pulsera fitness. ¡La motivación que necesitas para estar en forma! 🏃‍♀️ #Fitness'
-            },
-            {
-                'asin': 'B07VFPYNPG',
-                'title': 'Guantes de Entrenamiento Premium',
-                'url': f'https://www.amazon.com/dp/B07VFPYNPG/?tag={AMAZON_ASSOCIATE_TAG}',
-                'description': 'Protege tus manos y mejora tu agarre con estos guantes de entrenamiento transpirables. Perfectos para pesas y crossfit 🏋️‍♂️ #Fitness'
-            },
-            {
-                'asin': 'B093LGSVGM',
-                'title': 'Mancuernas Ajustables Profesionales',
-                'url': f'https://www.amazon.com/dp/B093LGSVGM/?tag={AMAZON_ASSOCIATE_TAG}',
-                'description': 'Entrena con diferentes pesos usando estas mancuernas ajustables. Ahorra espacio y dinero con este sistema todo en uno 💯 #Fitness'
-            },
-            {
-                'asin': 'B08HVZRYB3',
-                'title': 'Colchoneta de Ejercicios Premium',
-                'url': f'https://www.amazon.com/dp/B08HVZRYB3/?tag={AMAZON_ASSOCIATE_TAG}',
-                'description': 'Colchoneta antideslizante para yoga, pilates y ejercicios en casa. Máxima comodidad para tus entrenamientos diarios 🧘‍♀️ #Fitness'
-            },
-        ],
-        "cocina": [
-            {
-                'asin': 'B08L73XC6W',
-                'title': 'Olla Programable Multifunción',
-                'url': f'https://www.amazon.com/dp/B08L73XC6W/?tag={AMAZON_ASSOCIATE_TAG}',
-                'description': 'Prepara deliciosas recetas en minutos con esta olla programable. 10 funciones en un solo aparato para revolucionar tu cocina 🍲 #Cocina'
-            },
-            {
-                'asin': 'B08TWW58LH',
-                'title': 'Sartén Antiadherente de Titanio',
-                'url': f'https://www.amazon.com/dp/B08TWW58LH/?tag={AMAZON_ASSOCIATE_TAG}',
-                'description': 'Cocina más saludable con esta sartén de última tecnología. Sin PFOA, resistente a rayones y compatible con inducción 🍳 #Cocina'
-            },
-            {
-                'asin': 'B07S3NP4H1',
-                'title': 'Set de Cuchillos Profesionales',
-                'url': f'https://www.amazon.com/dp/B07S3NP4H1/?tag={AMAZON_ASSOCIATE_TAG}',
-                'description': 'Set de cuchillos de acero inoxidable con hoja afilada y mango ergonómico. El compañero perfecto para tus creaciones culinarias 🔪 #Cocina'
-            },
-            {
-                'asin': 'B07WNLQ1FX',
-                'title': 'Procesador de Alimentos Compacto',
-                'url': f'https://www.amazon.com/dp/B07WNLQ1FX/?tag={AMAZON_ASSOCIATE_TAG}',
-                'description': 'Pica, tritura y mezcla en segundos con este procesador potente y compacto. Ideal para preparaciones rápidas en tu día a día 🥗 #Cocina'
-            },
-            {
-                'asin': 'B089DNGYJ8',
-                'title': 'Báscula Digital de Precisión',
-                'url': f'https://www.amazon.com/dp/B089DNGYJ8/?tag={AMAZON_ASSOCIATE_TAG}',
-                'description': 'Mide con precisión tus ingredientes con esta báscula digital. Imprescindible para repostería y dietas controladas ⚖️ #Cocina'
-            },
-        ],
-        "gaming": [
-            {
-                'asin': 'B07NSSZCZQ',
-                'title': 'Auriculares Gaming con Micrófono',
-                'url': f'https://www.amazon.com/dp/B07NSSZCZQ/?tag={AMAZON_ASSOCIATE_TAG}',
-                'description': 'Sumérgete en tus juegos con estos auriculares con sonido envolvente y micrófono de alta definición. ¡Escucha cada detalle! 🎮 #Gaming'
-            },
-            {
-                'asin': 'B08L5CKPF3',
-                'title': 'Ratón Gaming RGB Programable',
-                'url': f'https://www.amazon.com/dp/B08L5CKPF3/?tag={AMAZON_ASSOCIATE_TAG}',
-                'description': 'Mejora tu precisión con este ratón gaming de alta sensibilidad. 8 botones programables y luces RGB personalizables 🖱️ #Gaming'
-            },
-            {
-                'asin': 'B08FMNXX68',
-                'title': 'Teclado Mecánico RGB para Gaming',
-                'url': f'https://www.amazon.com/dp/B08FMNXX68/?tag={AMAZON_ASSOCIATE_TAG}',
-                'description': 'Disfruta de la respuesta táctil de este teclado mecánico con retroiluminación RGB. Perfecto para gaming y trabajo 💻 #Gaming'
-            },
-            {
-                'asin': 'B08DRQ966G',
-                'title': 'Alfombrilla Gaming XXL con RGB',
-                'url': f'https://www.amazon.com/dp/B08DRQ966G/?tag={AMAZON_ASSOCIATE_TAG}',
-                'description': 'Alfombrilla extra grande con iluminación RGB para tu setup gaming. Superficie óptima para máxima precisión en tus juegos 🔥 #Gaming'
-            },
-            {
-                'asin': 'B07TB94DR3',
-                'title': 'Silla Gaming Ergonómica Premium',
-                'url': f'https://www.amazon.com/dp/B07TB94DR3/?tag={AMAZON_ASSOCIATE_TAG}',
-                'description': 'Juega cómodamente durante horas con esta silla gaming ergonómica. Soporte lumbar, reposabrazos ajustables y materiales premium 👑 #Gaming'
-            },
-        ],
-        "mascotas": [
-            {
-                'asin': 'B07X2RJ96V',
-                'title': 'Cama Ortopédica para Perros',
-                'url': f'https://www.amazon.com/dp/B07X2RJ96V/?tag={AMAZON_ASSOCIATE_TAG}',
-                'description': 'Dale a tu perro el descanso que merece con esta cama ortopédica. Alivia dolores articulares y mejora el sueño de tu mascota 🐕 #Mascotas'
-            },
-            {
-                'asin': 'B07DKW95JC',
-                'title': 'Juguete Interactivo para Gatos',
-                'url': f'https://www.amazon.com/dp/B07DKW95JC/?tag={AMAZON_ASSOCIATE_TAG}',
-                'description': 'Mantén a tu gato activo y entretenido con este juguete interactivo. Estimula su instinto cazador y reduce el estrés 🐱 #Mascotas'
-            },
-            {
-                'asin': 'B08FR3SVS9',
-                'title': 'Transportín Plegable para Mascotas',
-                'url': f'https://www.amazon.com/dp/B08FR3SVS9/?tag={AMAZON_ASSOCIATE_TAG}',
-                'description': 'Transportín seguro y cómodo para llevar a tu mascota al veterinario o de viaje. Fácil de montar y guardar 🧳 #Mascotas'
-            },
-            {
-                'asin': 'B08MTXZH1J',
-                'title': 'Bebedero Automático para Mascotas',
-                'url': f'https://www.amazon.com/dp/B08MTXZH1J/?tag={AMAZON_ASSOCIATE_TAG}',
-                'description': 'Mantén a tu mascota hidratada con este bebedero automático de gran capacidad. Filtro incluido para agua siempre fresca y limpia 💧 #Mascotas'
-            },
-            {
-                'asin': 'B08NFK98H8',
-                'title': 'Cortauñas Profesional para Mascotas',
-                'url': f'https://www.amazon.com/dp/B08NFK98H8/?tag={AMAZON_ASSOCIATE_TAG}',
-                'description': 'Cortauñas seguro con sensor para evitar cortes excesivos. Cuida las patas de tu mascota como un profesional ✂️ #Mascotas'
-            },
-        ],
-        "tecnología": [
-            {
-                'asin': 'B094DQPQP8',
-                'title': 'Auriculares Inalámbricos con Cancelación de Ruido',
-                'url': f'https://www.amazon.com/dp/B094DQPQP8/?tag={AMAZON_ASSOCIATE_TAG}',
-                'description': 'Disfruta de tu música favorita sin distracciones con estos auriculares con cancelación de ruido. 30h de batería y sonido premium 🎧 #Tecnología'
-            },
-            {
-                'asin': 'B08L5W6Y8N',
-                'title': 'Power Bank 20000mAh de Carga Rápida',
-                'url': f'https://www.amazon.com/dp/B08L5W6Y8N/?tag={AMAZON_ASSOCIATE_TAG}',
-                'description': 'Nunca te quedes sin batería con este power bank de alta capacidad y carga rápida. Compatible con todos tus dispositivos 🔋 #Tecnología'
-            },
-            {
-                'asin': 'B096BJLMGC',
-                'title': 'Smartwatch con Monitor de Salud',
-                'url': f'https://www.amazon.com/dp/B096BJLMGC/?tag={AMAZON_ASSOCIATE_TAG}',
-                'description': 'Controla tu actividad, sueño y salud con este smartwatch completo. Notificaciones, GPS y más de 100 modos deportivos ⌚ #Tecnología'
-            },
-            {
-                'asin': 'B0B2CP8BNK',
-                'title': 'Altavoz Bluetooth Portátil Resistente al Agua',
-                'url': f'https://www.amazon.com/dp/B0B2CP8BNK/?tag={AMAZON_ASSOCIATE_TAG}',
-                'description': 'Lleva tu música a todas partes con este altavoz bluetooth resistente al agua. 24h de autonomía y sonido envolvente 360° 🔊 #Tecnología'
-            },
-            {
-                'asin': 'B09FKGJ1TB',
-                'title': 'Cargador Inalámbrico Rápido 15W',
-                'url': f'https://www.amazon.com/dp/B09FKGJ1TB/?tag={AMAZON_ASSOCIATE_TAG}',
-                'description': 'Carga tus dispositivos sin cables con este cargador rápido compatible con iOS y Android. Diseño elegante y compacto ⚡ #Tecnología'
-            },
-        ],
-        "salud": [
-            {
-                'asin': 'B08FC5L3RG',
-                'title': 'Masajeador de Cuello con Calor',
-                'url': f'https://www.amazon.com/dp/B08FC5L3RG/?tag={AMAZON_ASSOCIATE_TAG}',
-                'description': 'Alivia dolores y tensiones con este masajeador cervical con función de calor. Ideal tras largas jornadas de trabajo o estudio 💆‍♂️ #Salud'
-            },
-            {
-                'asin': 'B0877CXHNF',
-                'title': 'Báscula Inteligente con Análisis Corporal',
-                'url': f'https://www.amazon.com/dp/B0877CXHNF/?tag={AMAZON_ASSOCIATE_TAG}',
-                'description': 'Controla tu peso y composición corporal con esta báscula smart. Sincroniza con tu smartphone y analiza 17 métricas diferentes ⚖️ #Salud'
-            },
-            {
-                'asin': 'B08GSQXLB5',
-                'title': 'Purificador de Aire con Filtro HEPA',
-                'url': f'https://www.amazon.com/dp/B08GSQXLB5/?tag={AMAZON_ASSOCIATE_TAG}',
-                'description': 'Respira aire más limpio con este purificador con filtro HEPA. Elimina alérgenos, polvo y olores para un hogar más saludable 🌬️ #Salud'
-            },
-            {
-                'asin': 'B08FSZ5GRB',
-                'title': 'Tensiómetro de Brazo Digital',
-                'url': f'https://www.amazon.com/dp/B08FSZ5GRB/?tag={AMAZON_ASSOCIATE_TAG}',
-                'description': 'Controla tu presión arterial cómodamente desde casa con este tensiómetro digital de alta precisión y fácil uso 💓 #Salud'
-            },
-            {
-                'asin': 'B085XDYY17',
-                'title': 'Cepillo de Dientes Eléctrico Sónico',
-                'url': f'https://www.amazon.com/dp/B085XDYY17/?tag={AMAZON_ASSOCIATE_TAG}',
-                'description': 'Logra una limpieza profesional con este cepillo eléctrico sónico. Elimina hasta 10 veces más placa que un cepillo manual ✨ #Salud'
-            },
-        ],
-        "viajes": [
-            {
-                'asin': 'B07RM5D4XV',
-                'title': 'Maleta de Cabina Ultraligera',
-                'url': f'https://www.amazon.com/dp/B07RM5D4XV/?tag={AMAZON_ASSOCIATE_TAG}',
-                'description': 'Viaja sin preocupaciones con esta maleta de cabina ultraligera y resistente. Cumple con las medidas de todas las aerolíneas ✈️ #Viajes'
-            },
-            {
-                'asin': 'B07F1RY2XW',
-                'title': 'Set de Organizadores de Equipaje',
-                'url': f'https://www.amazon.com/dp/B07F1RY2XW/?tag={AMAZON_ASSOCIATE_TAG}',
-                'description': 'Mantén tu ropa y accesorios perfectamente organizados con este set de 7 cubos de embalaje. Maximiza el espacio en tu maleta 🧳 #Viajes'
-            },
-            {
-                'asin': 'B07WNPPWW4',
-                'title': 'Almohada de Viaje Cervical Ergonómica',
-                'url': f'https://www.amazon.com/dp/B07WNPPWW4/?tag={AMAZON_ASSOCIATE_TAG}',
-                'description': 'Descansa cómodamente durante tus viajes con esta almohada cervical de memory foam. Evita dolores de cuello y disfruta del trayecto 😴 #Viajes'
-            },
-            {
-                'asin': 'B07S36P9DS',
-                'title': 'Adaptador Universal de Viaje',
-                'url': f'https://www.amazon.com/dp/B07S36P9DS/?tag={AMAZON_ASSOCIATE_TAG}',
-                'description': 'Conecta tus dispositivos en cualquier país con este adaptador universal compatible con más de 150 países. Incluye puertos USB 🔌 #Viajes'
-            },
-            {
-                'asin': 'B071X4RZ79',
-                'title': 'Báscula Digital para Maletas',
-                'url': f'https://www.amazon.com/dp/B071X4RZ79/?tag={AMAZON_ASSOCIATE_TAG}',
-                'description': 'Evita sobrecostes por exceso de equipaje con esta báscula digital portátil. Precisa, ligera y fácil de usar antes de cada viaje ⚖️ #Viajes'
-            },
-        ],
-    }
-    # Si el nicho no existe en nuestro catálogo, usa uno aleatorio
-    if niche not in catalogo:
-        niche = random.choice(list(catalogo.keys()))
-        
-    # Devuelve el catálogo para ese nicho
-    productos = catalogo[niche]
-    
-    # Si no hay suficientes productos, duplica los existentes
-    while len(productos) < max_results:
-        productos = productos + productos
-        
-    # Limita al máximo solicitado
-    return productos[:max_results]
+    product = get_viral_product_for_niche(niche)
+    return [product] if product else []
 
 def generate_tweet(product):
     desc = product['description'][:180]
@@ -486,7 +222,7 @@ def publicar_batch_diario():
         for product in products:
             if product['asin'] not in posted_products:
                 # Verificar que la URL de Amazon es válida
-                if verify_amazon_url(product['url']):
+                if is_valid_amazon_url(product['url']):
                     tweet = generate_tweet(product)
                     post_to_twitter(tweet, tipo="promocional")
                     posted_products.add(product['asin'])
@@ -521,6 +257,13 @@ def run_estrategia():
         # Espera 24 horas antes de volver a publicar
         print(f"Esperando 24 horas hasta el próximo batch... {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         time.sleep(24 * 60 * 60)
+
+def verify_amazon_url(url):
+    """
+    [OBSOLETO] Verifica si una URL de Amazon es válida (el producto existe).
+    Ahora redirige a is_valid_amazon_url de amazon_dynamic.py para validación robusta.
+    """
+    return is_valid_amazon_url(url)
 
 if __name__ == "__main__":
     print(f"Iniciando bot Amazon Afiliados + Twitter... {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
