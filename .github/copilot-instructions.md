@@ -5,7 +5,7 @@ Siempre debes tener en cuenta el contexto completo del proyecto al generar suger
 
 ## Reglas de trabajo
 
-1. **Referencia obligatoria al archivo**:
+1. **Referencia obligatoria al archivo en modo ask**:
    - Toda sugerencia debe incluir explícitamente:
      - Ruta completa del archivo (`path/to/file`)
      - Nombre del archivo

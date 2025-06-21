@@ -186,25 +186,32 @@ def post_tweet_v2_direct(text):
         return None, f"{response.status_code} - {response.text}"
 
 def post_to_twitter(tweet, tipo="promocional"):
-    tweet_id, error = post_tweet_v2_direct(tweet)
-    
-    if tweet_id:
-        print(f"Tuit publicado: {tweet}")
-        print(f"URL: https://twitter.com/i/web/status/{tweet_id}")
-        
-        # Guardar ID para evitar repeticiones
-        if tipo == "promocional":
-            posted_tweets['promocionales'].append(tweet_id)
-        elif tipo == "valioso":
-            posted_tweets['valiosos'].append(tweet)
-        save_posted_tweets()
-        
-        # Registrar estadística básica
-        registrar_tweet_stat(tweet, tipo, tweet_id)
-        return tweet_id
-    else:
-        print(f"Error al publicar tuit: {error}")
-        return None
+    import time
+    max_retries = 3
+    retry_wait = 60  # 1 minuto entre intentos normales
+    backoff_429 = 15 * 60  # 15 minutos si hay error 429
+    for attempt in range(max_retries):
+        tweet_id, error = post_tweet_v2_direct(tweet)
+        if tweet_id:
+            print(f"Tuit publicado: {tweet}")
+            print(f"URL: https://twitter.com/i/web/status/{tweet_id}")
+            if tipo == "promocional":
+                posted_tweets['promocionales'].append(tweet_id)
+            elif tipo == "valioso":
+                posted_tweets['valiosos'].append(tweet)
+            save_posted_tweets()
+            registrar_tweet_stat(tweet, tipo, tweet_id)
+            return tweet_id
+        else:
+            print(f"Error al publicar tuit: {error}")
+            if error and "429" in error:
+                print("[Twitter] Límite alcanzado. Esperando 15 minutos antes de reintentar...")
+                time.sleep(backoff_429)
+            else:
+                print(f"[Twitter] Esperando {retry_wait} segundos antes de reintentar...")
+                time.sleep(retry_wait)
+    print("[Twitter] No se pudo publicar el tuit tras varios intentos.")
+    return None
 
 def retweet_influencer(influencer_screen_name):
     print(f"Función de retweet no implementada para {influencer_screen_name}")
