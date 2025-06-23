@@ -5,6 +5,8 @@ import hmac
 import requests
 import json
 from dotenv import load_dotenv
+from scraping_utils import USER_AGENTS, PROXIES
+import random
 
 load_dotenv()
 
@@ -76,13 +78,20 @@ def search_amazon_items(keyword, item_count=1):
         'Host': host,
         'X-Amz-Date': amz_date,
         'X-Amz-Target': amz_target,
-        'Authorization': authorization_header
+        'Authorization': authorization_header,
+        'User-Agent': random.choice(USER_AGENTS)
     }
-    response = requests.post(endpoint, data=request_payload, headers=headers)
-    if response.status_code == 200:
-        return response.json()
-    else:
-        print(f"Error Amazon PAAPI: {response.status_code} - {response.text}")
+    proxy = random.choice(PROXIES)
+    proxies = {"http": proxy, "https": proxy} if proxy else None
+    try:
+        response = requests.post(endpoint, data=request_payload, headers=headers, proxies=proxies, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        else:
+            print(f"Error Amazon PAAPI: {response.status_code} - {response.text} (User-Agent: {headers['User-Agent']}, Proxy: {proxy})")
+            return None
+    except Exception as e:
+        print(f"[Error Amazon PAAPI] {endpoint}: {e} (User-Agent: {headers['User-Agent']}, Proxy: {proxy})")
         return None
 
 # Ejemplo de uso directo

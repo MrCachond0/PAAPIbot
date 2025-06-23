@@ -2,6 +2,8 @@ import os
 import requests
 from dotenv import load_dotenv
 from amazon_paapi_helper import search_amazon_items
+from scraping_utils import USER_AGENTS, PROXIES
+import random
 
 load_dotenv()
 
@@ -17,7 +19,7 @@ from pytrends.request import TrendReq
 def get_trending_keywords(niche, top_n=3):
     """
     Devuelve una lista de las top N keywords virales del nicho usando Google Trends.
-    Si no hay suficientes resultados, rellena con el nicho original.
+    Si no hay suficientes resultados, rellena con el nicho original y términos alternativos.
     """
     pytrends = TrendReq(hl='en-US', tz=360)
     kw_list = [niche]
@@ -35,9 +37,19 @@ def get_trending_keywords(niche, top_n=3):
             keywords = related_dict[niche]['top']['query'].tolist()[:top_n]
     except Exception as e:
         print(f"[pytrends] Sin tendencias relacionadas para '{niche}': {e}")
-    # Asegura al menos una keyword
+    # Asegura al menos una keyword y agrega términos alternativos si no hay suficientes
     if not keywords:
-        keywords = [niche]
+        # Términos alternativos por nicho
+        alternativos = {
+            "tecnología": ["gadgets", "smart home", "wearables"],
+            "salud": ["bienestar", "nutrición", "vitaminas"],
+            "fitness": ["ejercicio", "deporte", "gym"],
+            "cocina": ["utensilios cocina", "recetas", "electrodomésticos"],
+            "gaming": ["videojuegos", "consolas", "accesorios gaming"],
+            "mascotas": ["perros", "gatos", "accesorios mascotas"],
+            "viajes": ["maletas", "accesorios viaje", "equipaje"]
+        }
+        keywords = [niche] + alternativos.get(niche, [])
     return keywords[:top_n]
 
 
@@ -161,10 +173,11 @@ def get_best_seller_from_amazon(keyword, max_attempts=10):
                 print(f"[Descartado PAAPI] ASIN {asin} por URL inválida/no disponible.")
     return None
 
-def get_viral_product_for_niche(niche, fallback_niches=None, max_attempts=10):
+def get_viral_product_for_niche(niche, fallback_niches=None, max_attempts=10, fallback_depth=0, max_fallback_depth=2):
     """
     Busca el producto más viral y vendible para un nicho, probando varias keywords virales y validando la URL.
     Si no encuentra producto válido, prueba con otros nichos alternativos.
+    Limita la profundidad de fallbacks para evitar loops infinitos.
     """
     keywords = get_trending_keywords(niche, top_n=3)
     for kw in keywords:
@@ -182,12 +195,12 @@ def get_viral_product_for_niche(niche, fallback_niches=None, max_attempts=10):
         elif product:
             print(f"[Descartado] Producto con ASIN {product['asin']} por URL inválida.")
     # Si sigue sin encontrar, probar con otros nichos
-    if fallback_niches:
+    if fallback_niches and fallback_depth < max_fallback_depth:
         for alt_niche in fallback_niches:
             if alt_niche == niche:
                 continue
             print(f"[Fallback] Probando nicho alternativo: {alt_niche}")
-            product = get_viral_product_for_niche(alt_niche, max_attempts=max_attempts)
+            product = get_viral_product_for_niche(alt_niche, max_attempts=max_attempts, fallback_depth=fallback_depth+1, max_fallback_depth=max_fallback_depth)
             if product:
                 return product
     return None
@@ -196,12 +209,15 @@ def is_valid_amazon_url(url):
     """
     Verifica si una URL de Amazon es válida (status 200, contiene '/dp/' y no muestra página de error).
     Ahora detecta mensajes de error en varios idiomas y variantes comunes de Amazon.
+    Usa rotación de user-agent y soporte para proxies.
     """
     try:
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+            "User-Agent": random.choice(USER_AGENTS)
         }
-        resp = requests.get(url, headers=headers, timeout=8)
+        proxy = random.choice(PROXIES)
+        proxies = {"http": proxy, "https": proxy} if proxy else None
+        resp = requests.get(url, headers=headers, timeout=8, proxies=proxies)
         if resp.status_code == 200 and '/dp/' in resp.url:
             html = resp.text.lower()
             error_signals = [
