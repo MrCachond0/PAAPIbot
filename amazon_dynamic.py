@@ -252,25 +252,27 @@ def is_valid_amazon_url(url):
         print(f"[Error validando URL] {url}: {e}")
         return False
 
-def get_trending_hashtags(niche, max_tags=3):
+def get_trending_hashtags(niche=None, max_tags=3):
     """
-    Devuelve una lista de hashtags populares relacionados con el nicho usando pytrends.
+    Devuelve los primeros hashtags del top de tendencias globales usando pytrends.
     """
     try:
         pytrends = TrendReq(hl='es-MX', tz=360)
-        kw_list = [niche]
-        pytrends.build_payload(kw_list, cat=0, timeframe='now 7-d', geo='MX', gprop='')
-        related = pytrends.related_queries()
+        # Tendencias globales (Google Hot Trends)
+        trending_searches = pytrends.trending_searches(pn='global')
         hashtags = []
-        if related and niche in related and related[niche]['top'] is not None:
-            queries = related[niche]['top']['query'].tolist()
-            hashtags = [f"#{q.replace(' ', '')}" for q in queries if len(q) < 25][:max_tags]
+        for trend in trending_searches[0].tolist():
+            tag = f"#{trend.replace(' ', '').replace('#','')}"
+            if len(tag) < 25:
+                hashtags.append(tag)
+            if len(hashtags) >= max_tags:
+                break
         if not hashtags:
-            hashtags = [f"#{niche}"]
+            hashtags = ["#Tendencia", "#Trending", "#Viral"][:max_tags]
         return hashtags
     except Exception as e:
-        print(f"[pytrends] Error obteniendo hashtags para '{niche}': {e}")
-        return [f"#{niche}"]
+        print(f"[pytrends] Error obteniendo hashtags globales: {e}")
+        return ["#Tendencia", "#Trending", "#Viral"][:max_tags]
 
 # Ejemplo de uso:
 if __name__ == "__main__":
