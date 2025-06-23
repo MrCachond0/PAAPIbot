@@ -10,7 +10,7 @@ import uuid
 import urllib.parse
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
-from amazon_dynamic import is_valid_amazon_url, get_viral_product_for_niche
+from amazon_dynamic import is_valid_amazon_url, get_viral_product_for_niche, get_trending_hashtags
 
 # Cargar variables de entorno
 load_dotenv()
@@ -91,19 +91,20 @@ def generate_tweet(product):
         "Perfecto para regalar:",
         "Miles de personas ya lo usan:",
     ]
+    frases_venta = [
+        "¡Aprovecha esta oportunidad única!",
+        "Miles de personas ya lo compraron, ¿y tú?",
+        "Transforma tu vida con este producto top.",
+        "¡Haz clic y descubre por qué es tendencia!",
+        "No dejes pasar la mejor oferta del mes.",
+        "¡El favorito de los expertos y usuarios!"
+    ]
     desc = product.get('description') or product.get('title') or ''
     hook = random.choice(hooks)
-    hashtags = ""
-    # Añadir hashtags según el nicho si existe
-    if 'fitness' in desc.lower():
-        hashtags = "#Fitness #Salud"
-    elif 'cocina' in desc.lower():
-        hashtags = "#Cocina #Hogar"
-    elif 'tecnolog' in desc.lower() or 'tech' in desc.lower():
-        hashtags = "#Tecnología #Gadgets"
-    elif 'mascota' in desc.lower():
-        hashtags = "#Mascotas #PetLovers"
-    tweet = f"{hook} {desc} {product['url']} {hashtags}".strip()
+    frase_venta = random.choice(frases_venta)
+    hashtags = get_trending_hashtags(desc, max_tags=3)
+    hashtags_str = ' '.join(hashtags)
+    tweet = f"{hook} {desc}\n{frase_venta}\nCompra aquí ➡️ {product['url']}\n{hashtags_str}"
     if len(tweet) > 270:
         tweet = tweet[:267] + '...'
     return tweet

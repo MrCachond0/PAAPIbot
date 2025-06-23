@@ -1,4 +1,4 @@
-from amazon_dynamic import get_viral_product_for_niche
+from amazon_dynamic import get_viral_product_for_niche, get_trending_hashtags
 from bot import post_tweet_v2_direct
 import random
 import time
@@ -58,11 +58,24 @@ product = get_viral_product_for_niche(niche)
 if product:
     cta = random.choice(CALLS_TO_ACTION)
     emoji = random.choice(EMOJIS)
+    hashtags = get_trending_hashtags(niche, max_tags=3)
+    hashtags_str = ' '.join(hashtags)
+    frases_venta = [
+        "¡Aprovecha esta oportunidad única!",
+        "Miles de personas ya lo compraron, ¿y tú?",
+        "Transforma tu vida con este producto top.",
+        "¡Haz clic y descubre por qué es tendencia!",
+        "No dejes pasar la mejor oferta del mes.",
+        "¡El favorito de los expertos y usuarios!"
+    ]
+    frase_venta = random.choice(frases_venta)
     tweet = (
         f"{emoji} {cta}\n"
         f"[{niche.upper()}] {product['title']}\n"
         f"{product['description']}\n"
-        f"Compra aquí ➡️ {product['url']}"
+        f"{frase_venta}\n"
+        f"Compra aquí ➡️ {product['url']}\n"
+        f"{hashtags_str}"
     )
     if len(tweet) > 270:
         tweet = tweet[:267] + '...'

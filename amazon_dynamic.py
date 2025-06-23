@@ -252,6 +252,26 @@ def is_valid_amazon_url(url):
         print(f"[Error validando URL] {url}: {e}")
         return False
 
+def get_trending_hashtags(niche, max_tags=3):
+    """
+    Devuelve una lista de hashtags populares relacionados con el nicho usando pytrends.
+    """
+    try:
+        pytrends = TrendReq(hl='es-MX', tz=360)
+        kw_list = [niche]
+        pytrends.build_payload(kw_list, cat=0, timeframe='now 7-d', geo='MX', gprop='')
+        related = pytrends.related_queries()
+        hashtags = []
+        if related and niche in related and related[niche]['top'] is not None:
+            queries = related[niche]['top']['query'].tolist()
+            hashtags = [f"#{q.replace(' ', '')}" for q in queries if len(q) < 25][:max_tags]
+        if not hashtags:
+            hashtags = [f"#{niche}"]
+        return hashtags
+    except Exception as e:
+        print(f"[pytrends] Error obteniendo hashtags para '{niche}': {e}")
+        return [f"#{niche}"]
+
 # Ejemplo de uso:
 if __name__ == "__main__":
     niche = "fitness"
