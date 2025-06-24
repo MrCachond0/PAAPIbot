@@ -2,6 +2,7 @@ import os
 import random
 import tweepy
 from dotenv import load_dotenv
+import tweet_guard
 
 # Cargar variables de entorno
 load_dotenv()
@@ -59,9 +60,14 @@ product = products[0]  # Primer producto
 tweet_text = generate_tweet(product)
 print(f"Contenido del tweet: {tweet_text}")
 
-# Publicar tweet
-tweet_id = post_tweet_oauth1(tweet_text)
-if tweet_id:
-    print(f"¡Éxito! Tweet publicado con ID: {tweet_id}")
+# Verificar duplicado antes de publicar
+duplicado = tweet_guard.is_duplicate(tweet_text)
+if duplicado:
+    print("ADVERTENCIA: Este tweet ya fue publicado antes. No se publicará de nuevo.")
 else:
-    print("No se pudo publicar el tweet.")
+    tweet_id = post_tweet_oauth1(tweet_text)
+    if tweet_id:
+        print(f"¡Éxito! Tweet publicado con ID: {tweet_id}")
+        tweet_guard.register_tweet(tweet_text)
+    else:
+        print("No se pudo publicar el tweet.")

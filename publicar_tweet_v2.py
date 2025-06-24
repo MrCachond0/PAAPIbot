@@ -3,6 +3,7 @@ import json
 import random
 import requests
 from dotenv import load_dotenv
+import tweet_guard
 
 # Cargar variables de entorno
 load_dotenv()
@@ -130,12 +131,16 @@ def main():
     confirm = input("¿Quieres publicar este tweet? (s/n): ").lower().strip()
     
     if confirm == 's':
+        if tweet_guard.is_duplicate(tweet_text):
+            print("ADVERTENCIA: Este tweet ya fue publicado antes. No se publicará de nuevo.")
+            return
         # Publicar usando la implementación directa de OAuth
         tweet_id, error = post_tweet_v2_direct(tweet_text)
         
         if tweet_id:
             print(f"\n¡Éxito! Tweet publicado con ID: {tweet_id}")
             print(f"Puedes verlo en: https://twitter.com/i/web/status/{tweet_id}")
+            tweet_guard.register_tweet(tweet_text)
         else:
             print(f"\nError al publicar tweet: {error}")
             print("Comprueba que tus credenciales en .env son correctas y que tienes permisos de escritura.")

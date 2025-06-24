@@ -3,6 +3,7 @@ from bot import post_tweet_v2_direct
 import random
 import time
 import logging
+import tweet_guard
 
 # Configuración de logging detallado
 def setup_logger():
@@ -86,15 +87,19 @@ if product:
     # 4. Confirmar publicación
     confirm = input("¿Quieres publicar este tweet? (s/n): ").lower().strip()
     if confirm == 's':
-        print("\nPublicando en Twitter...")
-        tweet_id, error = post_tweet_v2_direct(tweet)
-        if tweet_id:
-            logger.info(f"Tweet publicado con éxito: https://twitter.com/i/web/status/{tweet_id}")
-            print(f"¡Éxito! Tweet publicado con ID: {tweet_id}")
-            print(f"URL: https://twitter.com/i/web/status/{tweet_id}")
+        if tweet_guard.is_duplicate(tweet):
+            print("ADVERTENCIA: Este tweet ya fue publicado antes. No se publicará de nuevo.")
         else:
-            logger.error(f"Error al publicar: {error}")
-            print(f"Error al publicar: {error}")
+            print("\nPublicando en Twitter...")
+            tweet_id, error = post_tweet_v2_direct(tweet)
+            if tweet_id:
+                logger.info(f"Tweet publicado con éxito: https://twitter.com/i/web/status/{tweet_id}")
+                print(f"¡Éxito! Tweet publicado con ID: {tweet_id}")
+                print(f"URL: https://twitter.com/i/web/status/{tweet_id}")
+                tweet_guard.register_tweet(tweet)
+            else:
+                logger.error(f"Error al publicar: {error}")
+                print(f"Error al publicar: {error}")
     else:
         print("Publicación cancelada.")
 else:

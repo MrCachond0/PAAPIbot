@@ -30,6 +30,8 @@ POSTED_FILE = 'posted_products.json'
 POSTED_TWEETS_FILE = 'posted_tweets.json'
 CONTENIDO_VALIOSO_FILE = 'contenido_valioso.json'
 TWEET_STATS_FILE = 'tweet_stats.json'
+LOCK_FILE = 'bot.lock'
+LOCK_TIMEOUT = 60 * 60 * 2  # 2 horas (ajustable)
 
 # Cargar nichos
 with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
@@ -298,6 +300,34 @@ def verify_amazon_url(url):
     """
     return is_valid_amazon_url(url)
 
+def acquire_lock():
+    now = time.time()
+    if os.path.exists(LOCK_FILE):
+        with open(LOCK_FILE, 'r') as f:
+            try:
+                last = float(f.read().strip())
+            except Exception:
+                last = 0
+        # Si el lock es reciente, otro proceso está corriendo
+        if now - last < LOCK_TIMEOUT:
+            print("[LOCK] Ya hay una instancia del bot ejecutándose. Saliendo...")
+            return False
+        else:
+            print("[LOCK] Lock obsoleto detectado. Tomando control...")
+    # Escribimos el lock actual
+    with open(LOCK_FILE, 'w') as f:
+        f.write(str(now))
+    return True
+
+def release_lock():
+    if os.path.exists(LOCK_FILE):
+        os.remove(LOCK_FILE)
+
 if __name__ == "__main__":
-    print(f"Iniciando bot Amazon Afiliados + Twitter... {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    run_estrategia()
+    if not acquire_lock():
+        exit(0)
+    try:
+        print(f"Iniciando bot Amazon Afiliados + Twitter... {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        run_estrategia()
+    finally:
+        release_lock()
